@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
+import { observer } from "mobx-react-lite";
 import { GraphicWalker } from '@kanaries/graphic-walker'
 //import type { IGWProps } from '../../graphic-walker/packages/graphic-walker/dist/App'
 //import type { IGlobalStore } from '../../graphic-walker/packages/graphic-walker/dist/store'
@@ -13,19 +14,21 @@ import type { IStoInfo } from '@kanaries/graphic-walker/dist/utils/save';
 import { loadDataSource } from './dataSource';
 import { IDataSetInfo, IMutField, IRow } from '@kanaries/graphic-walker/dist/interfaces';
 import { setConfig } from './utils/userConfig';
+import Login from "./components/login"
+import { UserIcon } from '@heroicons/react/24/outline';
 
 /** App does not consider props.storeRef */
-const App: React.FC<IAppProps> = (propsIn) => {
+const App: React.FC<IAppProps> = observer((propsIn) => {
   const storeRef = React.useRef<IGlobalStore|null>(null);
   const {dataSource, ...props} = propsIn;
   const { visSpec, dataSourceProps, rawFields, userConfig } = props;
   if (!props.storeRef?.current) {
     props.storeRef = storeRef;
   }
-
+  const loginIconRef = useRef<SVGSVGElement | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   // let tunnel: Tunnel;
-
   useEffect(() => {
     if (userConfig) setConfig(userConfig);
   }, [userConfig]);
@@ -109,14 +112,33 @@ const App: React.FC<IAppProps> = (propsIn) => {
     }
   }, [updateDataSource]);
 
+  props["toolbar"] = {
+    extra: [
+      {
+        key: 'login',
+        label: 'login',
+        icon: props => (
+          <UserIcon {...props} ref={e => {
+            setMounted(true);
+            loginIconRef.current = e;
+          }} />
+        ),
+        onClick: () => {}
+      }
+    ]
+  }
+  
   return (
     <React.StrictMode>
       <style>{style}</style>
+      {
+        mounted && <Login id={props["id"]} loginIconRef={loginIconRef} />
+      }
       <GraphicWalker {...props} />
       <Options {...props} />
     </React.StrictMode>
   );
-}
+})
 
 function GWalker(props: IAppProps, id: string) {
     // GWalkerMap[id] = c;
