@@ -26,10 +26,11 @@ export const decryptData = async (data: string, key: string) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: "symm",
-        secretKey: btoa(key),
-        data: btoa(data),
+        secretKey: key,
+        data: data,
       }),
     }
-  )
-  return "token";
+  );
+  const { decrypted } = await resp.json();
+  return decrypted;
 }

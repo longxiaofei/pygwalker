@@ -34,8 +34,8 @@ const getToken = async() => {
 
     const decryptedToken = await decryptData(tokenPromiseResult.token, authStore.aesKey as string);
     
-    // return decryptedToken
-    return tokenPromiseResult.token
+    return decryptedToken
+    // return tokenPromiseResult.token
 }
 
 export { getToken };
