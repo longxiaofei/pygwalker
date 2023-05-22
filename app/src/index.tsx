@@ -29,6 +29,8 @@ const App: React.FC<IAppProps> = observer((propsIn) => {
   if (!props.storeRef?.current) {
     props.storeRef = storeRef;
   }
+  props["id"] = "dddddd"
+  props["sourceInvokeCode"] = ""
   const loginIconRef = useRef<SVGSVGElement | null>(null);
   const [mounted, setMounted] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
