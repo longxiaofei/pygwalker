@@ -16,7 +16,10 @@ import { loadDataSource } from './dataSource';
 import { IDataSetInfo, IMutField, IRow } from '@kanaries/graphic-walker/dist/interfaces';
 import { setConfig } from './utils/userConfig';
 import CodeExportModal from './components/codeExportModal';
-import { UserIcon } from '@heroicons/react/24/outline';
+import {
+  CodeBracketSquareIcon,
+  UserIcon
+} from '@heroicons/react/24/outline';
 
 /** App does not consider props.storeRef */
 const App: React.FC<IAppProps> = observer((propsIn) => {
@@ -28,6 +31,7 @@ const App: React.FC<IAppProps> = observer((propsIn) => {
   }
   const wrapRef = useRef<HTMLElement | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   // let tunnel: Tunnel;
   useEffect(() => {
@@ -114,7 +118,16 @@ const App: React.FC<IAppProps> = observer((propsIn) => {
   }, [updateDataSource]);
 
   props["toolbar"] = {
+    exclude: ["export_code"],
     extra: [
+      {
+        key: 'export_code',
+        label: 'export_code',
+        icon: CodeBracketSquareIcon,
+        onClick: () => {
+            setExportOpen(true);
+        }
+      },
       {
         key: 'login',
         label: 'login',
