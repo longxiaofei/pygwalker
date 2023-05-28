@@ -16,6 +16,7 @@ import { loadDataSource } from './dataSource';
 import { IDataSetInfo, IMutField, IRow } from '@kanaries/graphic-walker/dist/interfaces';
 import { setConfig, checkUploadPrivacy } from './utils/userConfig';
 import CodeExportModal from './components/codeExportModal';
+import CacheHook from './components/cacheHook';
 import {
   CodeBracketSquareIcon,
   UserIcon
@@ -25,10 +26,14 @@ import {
 const App: React.FC<IAppProps> = observer((propsIn) => {
   const storeRef = React.useRef<IGlobalStore|null>(null);
   const {dataSource, ...props} = propsIn;
+  const [baseStoInfo, setBaseStoInfo] = useState<IStoInfo | null>(null);
   const { visSpec, dataSourceProps, rawFields, userConfig } = props;
   if (!props.storeRef?.current) {
     props.storeRef = storeRef;
   }
+  // props["id"] = "graphic-walker";
+  // props["sourceInvokeCode"] = ""
+  // props["hashcode"] = "ddsdsd"
   const wrapRef = useRef<HTMLElement | null>(null);
   const [mounted, setMounted] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -59,27 +64,28 @@ const App: React.FC<IAppProps> = observer((propsIn) => {
     visSpec?: string
   }) => {
     const { data, rawFields, visSpec } = p;
-      if (visSpec) {
-        const specList = JSON.parse(visSpec);
-        storeRef?.current?.vizStore?.importStoInfo({
-          dataSources: [{
-            id: 'dataSource-0',
-            data: data,
-          }],
-          datasets: [{
-            id: 'dataset-0',
-            name: 'DataSet', rawFields: rawFields, dsId: 'dataSource-0',
-          }],
-          specList,
-        } as IStoInfo);
-      } else {
-        storeRef?.current?.commonStore?.updateTempSTDDS({
-          name: 'Dataset',
-          rawFields: rawFields,
-          dataSource: data,
-        } as IDataSetInfo);
-        storeRef?.current?.commonStore?.commitTempDS();
-      }
+    const baseStoInfo = {
+      dataSources: [{
+        id: 'dataSource-0',
+        data: data,
+      }],
+      datasets: [{
+        id: 'dataset-0',
+        name: 'DataSet', rawFields: rawFields, dsId: 'dataSource-0',
+      }],
+    } as IStoInfo;
+    if (visSpec) {
+      baseStoInfo.specList = JSON.parse(visSpec);
+      storeRef?.current?.vizStore?.importStoInfo(baseStoInfo);
+    } else {
+      storeRef?.current?.commonStore?.updateTempSTDDS({
+        name: 'Dataset',
+        rawFields: rawFields,
+        dataSource: data,
+      } as IDataSetInfo);
+      storeRef?.current?.commonStore?.commitTempDS();
+    }
+    setBaseStoInfo(baseStoInfo);
   }, [storeRef])
 
   useEffect(() => {
@@ -144,6 +150,7 @@ const App: React.FC<IAppProps> = observer((propsIn) => {
       }
       <CodeExportModal open={exportOpen} setOpen={setExportOpen} globalStore={storeRef} sourceCode={props["sourceInvokeCode"]} />
       <GraphicWalker {...props} />
+      <CacheHook originStoInfo={baseStoInfo} storeRef={storeRef} cacheId={`${props["hashcode"]}-${props["id"]}`} />
       <Options {...props} />
     </React.StrictMode>
   );
