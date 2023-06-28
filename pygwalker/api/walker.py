@@ -5,6 +5,7 @@ import time
 import logging
 
 from typing_extensions import Literal
+import ipywidgets
 
 from pygwalker.utils.display import display_html, display_on_streamlit
 from pygwalker.data_parsers.base import FieldSpec, BaseDataParser
@@ -62,6 +63,7 @@ def walk(
         fieldSpecs = {}
     if gid is None:
         gid = GlobalVarManager.get_global_gid()
+    comm = HackerCommunication(gid)
     kwargs["sourceInvokeCode"] = "pyg.walk(df, spec='____pyg_walker_spec_params____')"
 
     try:
@@ -99,11 +101,16 @@ def walk(
 
     props["dataSource"] = get_max_limited_datas(origin_data_source)
     iframe_html = _get_render_iframe(gid, props)
+    comm_widget = comm.get_widgets()
+    pygwalker_widget = ipywidgets.Box(
+        [ipywidgets.HTML(iframe_html), comm_widget],
+        layout=ipywidgets.Layout(display="block")
+    )
 
     if len(origin_data_source) > len(props["dataSource"]):
         upload_tool = BatchUploadDatasTool()
         upload_tool.init()
-        display_html(iframe_html)
+        display_html(pygwalker_widget)
         time.sleep(1)
         upload_tool.run(
             records=origin_data_source,
@@ -113,4 +120,4 @@ def walk(
             tunnel_id=props["dataSourceProps"]["tunnelId"],
         )
     else:
-        display_html(iframe_html)
+        display_html(pygwalker_widget)
