@@ -20,9 +20,13 @@ import {
   CodeBracketSquareIcon,
   UserIcon
 } from '@heroicons/react/24/outline';
+import communicationStore from "./store/communication";
+import initCommunication from "./utils/communication";
+
 
 /** App does not consider props.storeRef */
 const App: React.FC<IAppProps> = observer((propsIn) => {
+
   const storeRef = React.useRef<IGlobalStore|null>(null);
   const {dataSource, ...props} = propsIn;
   const { visSpec, dataSourceProps, rawFields, userConfig } = props;
@@ -33,6 +37,7 @@ const App: React.FC<IAppProps> = observer((propsIn) => {
   const [mounted, setMounted] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
 
+  communicationStore.setComm(initCommunication(props["id"]));
   // let tunnel: Tunnel;
   useEffect(() => {
     if (userConfig) setConfig(userConfig);
