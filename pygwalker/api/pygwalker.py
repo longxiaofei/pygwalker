@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional, Union
+import base64
 import html as m_html
 import urllib
 import json
@@ -148,7 +149,11 @@ class PygWalker:
         """
         Display on jupyter-nbconvert html.
         """
+        content = self.data_parser.to_parquet()
+        content.seek(0)
+        parquet_data = base64.b64encode(content.read()).decode()
         props = self._get_props("jupyter")
+        props["parquetData"] = parquet_data
         iframe_html = self._get_render_iframe(props)
         display_html(iframe_html)
 
@@ -405,6 +410,7 @@ class PygWalker:
             "gwMode": self.gw_mode,
             "needLoadLastSpec": True,
             "kanariesToken": GlobalVarManager.kanaries_api_key,
+            "parquetData": "",
             **self.other_props,
         }
 

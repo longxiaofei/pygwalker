@@ -20,6 +20,7 @@ export interface IAppProps extends IGWProps {
     needLoadLastSpec: boolean;
     // temporary solution of saving token
     kanariesToken: string;
+    parquetData: string;
 }
 
 export interface IDataSourceProps {
