@@ -34,6 +34,11 @@ class PolarsDataFrameDataParser(BaseDataFrameDataParser[pl.DataFrame]):
         self.origin_df.write_csv(content)
         return content
 
+    def to_parquet(self) -> io.BytesIO:
+        content = io.BytesIO()
+        self.origin_df.write_parquet(content)
+        return content
+
     def _rename_dataframe(self, df: pl.DataFrame) -> pl.DataFrame:
         df = df.rename({
             old_col: fname_encode(new_col)

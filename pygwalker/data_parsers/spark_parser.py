@@ -56,6 +56,11 @@ class SparkDataFrameDataParser(BaseDataParser):
         self.origin_df.toPandas().to_csv(content, index=False)
         return content
 
+    def to_parquet(self) -> io.BytesIO:
+        content = io.BytesIO()
+        self.origin_df.toPandas().to_parquet(content)
+        return content
+
     def _rename_dataframe(self, df: DataFrame) -> DataFrame:
         new_columns = [fname_encode(col) for col in rename_columns(list(df.columns))]
         return df.toDF(*new_columns)

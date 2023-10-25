@@ -79,6 +79,16 @@ export function finishDataService(msg: any) {
 }
 
 export async function getDatasFromKernelBySql(payload: IDataQueryPayload) {
+    const resp = fetch(
+        "https://api-home-test-env.kanaries.cn/public/query",
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({datasetId: "d1jpqv8iqxvk", query: payload}),
+        }
+    )
+    console.log(await (await resp).json())
+
     const sql = parser_dsl_with_table(
         "pygwalker_mid_table",
         JSON.stringify(payload)

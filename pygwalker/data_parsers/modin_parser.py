@@ -40,6 +40,11 @@ class ModinPandasDataFrameDataParser(BaseDataFrameDataParser[mpd.DataFrame]):
         self.origin_df.to_csv(content, index=False)
         return content
 
+    def to_parquet(self) -> io.BytesIO:
+        content = io.BytesIO()
+        self.origin_df.to_parquet(content)
+        return content
+
     def _rename_dataframe(self, df: mpd.DataFrame) -> mpd.DataFrame:
         df = df.reset_index(drop=True)
         df.columns = [fname_encode(col) for col in rename_columns(list(df.columns))]
