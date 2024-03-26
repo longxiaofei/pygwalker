@@ -51,7 +51,7 @@ class PygWalker:
         self,
         *,
         gid: Optional[Union[int, str]],
-        dataset: Union[DataFrame, Connector, str],
+        dataset: Union[DataFrame, Connector, str, List[DataFrame], List[Tuple[str, DataFrame]]],
         field_specs: List[FieldSpec],
         spec: str,
         source_invoke_code: str,
@@ -119,32 +119,36 @@ class PygWalker:
     def _get_data_parser(
         self,
         *,
-        dataset: Union[DataFrame, Connector, str],
+        dataset: Union[DataFrame, Connector, str, List[DataFrame], List[Tuple[str, DataFrame]]],
         field_specs: List[FieldSpec],
         use_cloud_calc: bool,
         kanaries_api_key: str,
         cloud_service: CloudService
     ) -> BaseDataParser:
-        data_parser = get_parser(
-            dataset,
-            field_specs,
-            other_params={"kanaries_api_key": kanaries_api_key}
-        )
-        if not use_cloud_calc:
-            return data_parser
+        field_specs_map = {
+            field_spec.dataset_name or "df": field_spec
+            for field_spec in field_specs
+        }
 
-        dataset_id = cloud_service.create_cloud_dataset(
-            data_parser,
-            f"temp_{rand_str()}",
-            False,
-            True
-        )
+        if isinstance(dataset, list, Connector) and use_cloud_calc:
+            raise ValueError("Connector or list of DataFrame can't use cloud calc")
 
-        return get_parser(
-            dataset_id,
-            field_specs,
-            other_params={"kanaries_api_key": kanaries_api_key}
-        )
+        if isinstance(dataset, list):
+            dataset_list = [
+                item if isinstance(item, tuple) else (f"df_{index}", item)
+                for index, item in enumerate(dataset)
+            ]
+        else:
+            dataset_list = [
+                ("df", dataset)
+            ]
+
+        data_parser_list = [
+            (dataset_name, get_parser(dataset, field_specs_map.get(dataset_name, []), other_params={"kanaries_api_key": kanaries_api_key}))
+            for dataset_name, dataset in dataset_list
+        ]
+
+        return data_parser_list
 
     def _get_parse_dsl_type(self, data_parser: BaseDataParser) -> Literal["server", "client"]:
         if data_parser.dataset_tpye.startswith("connector"):

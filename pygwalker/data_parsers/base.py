@@ -30,6 +30,7 @@ class FieldSpec(BaseModel):
     semantic_type: Literal['?', 'nominal', 'ordinal', 'temporal', 'quantitative'] = '?'
     analytic_type: Literal['?', 'dimension', 'measure'] = '?'
     display_as: str = None
+    dataset_name: str = None
 
 
 INFINITY_DATA_SIZE = 1 << 62

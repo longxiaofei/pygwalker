@@ -1,6 +1,10 @@
 import sys
-from typing import Dict, Optional, Union, Any, List
+from typing import Dict, Optional, Union, Any, List, Tuple
 
+import duckdb
+import sqlglot
+
+from pygwalker.utils.payload_to_sql import get_sql_from_payload
 from pygwalker.data_parsers.base import BaseDataParser, FieldSpec
 from pygwalker.data_parsers.database_parser import Connector
 from pygwalker._typing import DataFrame
@@ -78,3 +82,90 @@ def get_parser(
         other_params
     )
     return parser
+
+
+class MultiDatasetParser:
+    """Multi dataset parser"""
+    def __init__(self, parsers: List[Tuple[str, BaseDataParser]]):
+        self._parsers = parsers
+        self._parser_list = [parser for _, parser in parsers]
+        self._parser_map = dict(parsers)
+
+    @property
+    def data_size(self) -> int:
+        return sum(parser.data_size for parser in self._parser_list)
+
+    def to_records(self, limit: Optional[int] = None) -> Dict[str, List[Dict[str, Any]]]:
+        return {name: parser.to_records(limit) for name, parser in self._parsers}
+
+    @property
+    def raw_fields(self) -> List[Dict[str, str]]:
+        raw_fields = []
+        for name, parser in self._parsers:
+            raw_fields.extend([{**field, "dataset": name} for field in parser.raw_fields])
+        return raw_fields
+
+    @property
+    def dataset_tpye(self) -> str:
+        return self._parser_list[0].dataset_tpye
+
+    def get_datas_by_sql(self, sql: str) -> List[Dict[str, Any]]:
+        query_function_map = {
+            "pandas_dataframe": self._query_by_duckdb,
+            "modin_dataframe": self._query_by_duckdb,
+            "polars_dataframe": self._query_by_duckdb,
+            "spark_dataframe": self._query_by_spark,
+            "cloud_dataset":  
+        }
+
+    def get_datas_by_payload(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        sql = get_sql_from_payload(
+            "pygwalker_view",
+            payload,
+            {name: parser.field_metas for name, parser in self._parsers}
+        )
+        return self.get_datas_by_sql(sql)
+
+    def batch_get_datas_by_sql(self, sql_list: List[str]) -> List[List[Dict[str, Any]]]:
+        """batch get records"""
+        return [
+            self.get_datas_by_sql(sql)
+            for sql in sql_list
+        ]
+
+    def batch_get_datas_by_payload(self, payload_list: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+        """batch get records"""
+        return [
+            self.get_datas_by_payload(payload)
+            for payload in payload_list
+        ]
+
+    def _query_by_duckdb(self, sql: str) -> List[Dict[str, Any]]:
+        """query by duckdb"""
+        try:
+            duckdb.query("SET TimeZone = 'UTC'")
+        except Exception:
+            pass
+
+        for name, parser in self._parsers:
+            duckdb.register(name, parser._duckdb_df)
+
+        result = duckdb.query(sql)
+        return [
+            dict(zip(result.columns, row))
+            for row in result.fetchall()
+        ]
+
+    def _query_by_spark(self, sql: str) -> List[Dict[str, Any]]:
+        """query by spark"""
+        for name, parser in self._parsers:
+            parser.df.createOrReplaceTempView(name)
+        sql = sqlglot.transpile(sql, read="duckdb", write="spark")[0]
+        result_df = self._parser_list[0].spark.sql(sql)
+        return [row.asDict() for row in result_df.collect()]
+    
+    def _query_by_cloud(self, sql: str) -> List[Dict[str, Any]]:
+        raise NotImplementedError("Not implemented yet")
+    
+    def _query_by_database(self, sql: str) -> List[Dict[str, Any]]:
+        raise NotImplementedError("Not implemented yet")
