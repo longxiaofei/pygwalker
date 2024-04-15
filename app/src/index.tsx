@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { observer } from "mobx-react-lite";
 import { autorun } from "mobx"
@@ -6,6 +6,7 @@ import { GraphicWalker, PureRenderer, GraphicRenderer, TableWalker } from '@kana
 import type { VizSpecStore } from '@kanaries/graphic-walker/store/visualSpecStore'
 import type { IGWHandler, IViewField, ISegmentKey, IDarkMode, IChatMessage } from '@kanaries/graphic-walker/interfaces';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Streamlit, withStreamlitConnection } from "streamlit-component-lib"
 
 import Options from './components/options';
 import { IAppProps } from './interfaces';
@@ -13,9 +14,9 @@ import { IAppProps } from './interfaces';
 import { loadDataSource, postDataService, finishDataService, getDatasFromKernelBySql, getDatasFromKernelByPayload } from './dataSource';
 
 import commonStore from "./store/common";
-import { initJupyterCommunication, initHttpCommunication } from "./utils/communication";
+import { initJupyterCommunication, initHttpCommunication, initStreamlitCommunication } from "./utils/communication";
 import communicationStore from "./store/communication"
-import { setConfig, checkUploadPrivacy } from './utils/userConfig';
+import { setConfig } from './utils/userConfig';
 import CodeExportModal from './components/codeExportModal';
 import type { IPreviewProps, IChartPreviewProps } from './components/preview';
 import { Preview, ChartPreview } from './components/preview';
@@ -39,13 +40,14 @@ import {
     ToggleGroup,
     ToggleGroupItem,
 } from "@/components/ui/toggle-group"
-import { SunIcon, MoonIcon, DesktopIcon } from "@radix-ui/react-icons"
+import { SunIcon, MoonIcon, DesktopIcon, DotsHorizontalIcon, Cross2Icon } from "@radix-ui/react-icons"
 
 // @ts-ignore
 import style from './index.css?inline'
 import { currentMediaTheme } from './utils/theme';
 import { AppContext, darkModeContext } from './store/context';
 import FormatSpec from './utils/formatSpec';
+import { Button } from './components/ui/button';
 
 
 const initChart = async (gwRef: React.MutableRefObject<IGWHandler | null>, total: number, props: IAppProps) => {
@@ -271,14 +273,80 @@ const ExploreApp: React.FC<IAppProps & {initChartFlag: boolean}> = (props) => {
     );
 }
 
+const PureRednererAppOnStreamlit: React.FC<IAppProps> = observer((props) => {
+    const computationCallback = React.useMemo(() => getComputationCallback(props), []);
+    const spec = React.useMemo(() => props.visSpec[0], []);
+    const explorerSpec = React.useMemo(() => props.visSpec, []);
+    const [mode, setMode] = useState<"chart" | "explorer">("chart");
+
+    const openExplorer = () => {
+        if (!window.self.frameElement) return;
+        window.self.frameElement["style"] = "height: min(90vh, 1020px); width: 94vw; position: fixed; top: 50px; left: 3vw; border: 1px solid #000; border-radius: 10px; z-index: 999;";
+        window.self.frameElement.setAttribute("scrolling", "true")
+        setMode("explorer");
+    }
+
+    const closeExplorer = () => {
+        if (!window.self.frameElement) return;
+        window.self.frameElement["style"] = "";
+        window.self.frameElement.setAttribute("scrolling", "false")
+        setMode("chart");
+    }
+
+    return (
+        <React.StrictMode>
+            {mode === "chart" && (
+                <div className='flex'>
+                    <PureRenderer
+                        {...props.extraConfig}
+                        appearance={useContext(darkModeContext)}
+                        name={spec.name}
+                        visualConfig={spec.config}
+                        visualLayout={spec.layout}
+                        visualState={spec.encodings}
+                        type='remote'
+                        computation={computationCallback!}
+                    />
+                    <div>
+                        <Button variant="outline" size="icon" className='h-6 w-6' onClick={openExplorer}>
+                            <DotsHorizontalIcon className='h-4 w-4' />
+                        </Button>
+                    </div>
+                </div>
+            )}
+            {mode === "explorer" && (
+                <>
+                    <button className='absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none'>
+                        <Cross2Icon className='h-4 w-4' onClick={closeExplorer} />
+                    </button>
+                    <div className='pt-8'>
+                        <GraphicWalker
+                            {...props.extraConfig}
+                            appearance={useContext(darkModeContext)}
+                            vizThemeConfig={props.themeKey}
+                            fieldkeyGuard={props.fieldkeyGuard}
+                            fields={props.rawFields}
+                            computation={computationCallback}
+                            chart={explorerSpec}
+                            experimentalFeatures={{ computedField: props.useKernelCalc }}
+                            defaultConfig={{ config: { timezoneDisplayOffset: 0 } }}
+                        />
+                    </div>
+                </>
+            )}
+        </React.StrictMode>
+    )
+});
+
 const PureRednererApp: React.FC<IAppProps> = observer((props) => {
-    const computationCallback = getComputationCallback(props);
-    const spec = props.visSpec[0];
+    const computationCallback = React.useMemo(() => getComputationCallback(props), []);
+    const spec = React.useMemo(() => props.visSpec[0], []);
 
     return (
         <React.StrictMode>
             <PureRenderer
                 {...props.extraConfig}
+                appearance={useContext(darkModeContext)}
                 name={spec.name}
                 visualConfig={spec.config}
                 visualLayout={spec.layout}
@@ -333,18 +401,15 @@ function GWalkerComponent(props: IAppProps) {
         }
     }, []);
 
-    switch(props.gwMode) {
-        case "explore":
-            return <ExploreApp {...props} initChartFlag={initChartFlag} />;
-        case "renderer":
-            return <PureRednererApp {...props} />;
-        case "filter_renderer":
-            return <GraphicRendererApp {...props} />;
-        case "table":
-            return <TableWalkerApp {...props} />;
-        default:
-            return<ExploreApp {...props} initChartFlag={initChartFlag} />
-    }
+    return (
+        <React.StrictMode>
+            { props.gwMode === "explore" && <ExploreApp {...props} initChartFlag={initChartFlag} /> }
+            { props.env === "streamlit" && props.gwMode === "renderer" && <PureRednererAppOnStreamlit {...props} /> }
+            { props.env !== "streamlit" && props.gwMode === "renderer" && <PureRednererApp {...props} /> }
+            { props.gwMode === "filter_renderer" && <GraphicRendererApp {...props} /> }
+            { props.gwMode === "table" && <TableWalkerApp {...props} /> }
+        </React.StrictMode>
+    )
 }
 
 function GWalker(props: IAppProps, id: string) {
@@ -396,13 +461,14 @@ function ChartPreviewApp(props: IChartPreviewProps, id: string) {
 }
 
 function GraphicRendererApp(props: IAppProps) {
-    const computationCallback = getComputationCallback(props);
     const globalProps = {
         rawFields: props.rawFields,
         containerStyle: { height: "700px", width: "60%" },
         themeKey:props.themeKey,
         dark: useContext(darkModeContext),
     }
+    const computationCallback = React.useMemo(() => getComputationCallback(props), []);
+    const visSpec = useMemo(() => props.visSpec.map((chart) => [chart]), []);
 
     return (
         <React.StrictMode>
@@ -414,19 +480,19 @@ function GraphicRendererApp(props: IAppProps) {
                         })}
                     </TabsList>
                 </div>
-                {props.visSpec.map((chart, index) => {
+                {visSpec.map((chart, index) => {
                     return <TabsContent key={index} value={index.toString()}>
                         {
                             props.useKernelCalc ? 
                             <GraphicRenderer
                                 {...globalProps}
                                 computation={computationCallback!}
-                                chart={[chart]}
+                                chart={chart}
                             /> :
                             <GraphicRenderer
                                 {...globalProps}
                                 data={props.dataSource!}
-                                chart={[chart]}
+                                chart={chart}
                             />
                         }
                     </TabsContent>
@@ -461,4 +527,65 @@ function TableWalkerApp(props: IAppProps) {
     )
 }
 
-export default { GWalker, PreviewApp, ChartPreviewApp }
+const initOnStreamlit = async(props: IAppProps) => {
+    const comm = initStreamlitCommunication();
+    communicationStore.setComm(comm);
+    await initDslParser();
+}
+
+function SteamlitGWalker(streamlitProps: any) {
+    const commCallbackMsg = streamlitProps.args.comm_callback_msg;
+    const props = streamlitProps.args as IAppProps;
+    const [inited, setInited] = useState(false);
+    const container = useRef(null);
+    props.visSpec = FormatSpec(props.visSpec, props.rawFields);
+
+    useEffect(() => {
+        initOnStreamlit(props).then(() => {
+            setInited(true);
+        })
+    }, []);
+
+    useEffect(() => {
+        if(commCallbackMsg.response !== null) {
+            commCallbackMsg.response.map(item => {
+                communicationStore.comm?.resolveTaskResult(item.rid, item.data)
+            });
+            Streamlit.setComponentValue({"request": null, "response": null});
+        }
+    }, [commCallbackMsg]);
+
+    useEffect(() => {
+        const currentContainer = container.current;
+        if (!container.current) return;
+        const resizeObserver = new ResizeObserver(() => {
+            Streamlit.setFrameHeight((container.current?.clientHeight  ?? 0) + 20);
+        })
+        resizeObserver.observe(container.current);
+        return () => resizeObserver.disconnect();
+    }, [inited]);
+
+    return (
+        <React.StrictMode>
+            {inited && (
+                <div ref={container}>
+                    <MainApp darkMode={props.dark}>
+                        <GWalkerComponent {...props} />
+                    </MainApp>
+                </div>
+            )}
+        </React.StrictMode>
+    );
+};
+
+const renderStreamlitGWalker = () => {
+    const StreamlitGWalker = withStreamlitConnection(SteamlitGWalker);
+    ReactDOM.render(
+        <React.StrictMode>
+            <StreamlitGWalker />
+        </React.StrictMode>,
+        document.getElementById("root")
+    )
+}
+
+export default { GWalker, PreviewApp, ChartPreviewApp, renderStreamlitGWalker }

@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import commonStore from '../store/common';
+import { Streamlit } from "streamlit-component-lib"
 
 interface IResponse {
     data?: any;
@@ -11,6 +12,7 @@ interface ICommunication {
     sendMsg: (action: string, data: any, timeout?: number) => Promise<IResponse>;
     registerEndpoint: (action: string, callback: (data: any) => any) => void;
     sendMsgAsync: (action: string, data: any, rid: string | null) => void;
+    resolveTaskResult: (rid: string, resp: IResponse) => void;
 }
 
 const getSignalName = (rid: string) => {
@@ -35,8 +37,16 @@ const raiseRequestError = (message: string, code: number) => {
                 <>
                 <p className="py-1">kanaries_api_key is not valid.</p>
                 <p className="py-1">Please set kanaries_api_key first.</p>
-                <p className="py-1">execute it in terminal:</p>
-                <p className="font-semibold px-1 py-1">`pygwalker login`</p>
+                <p className="py-1">If you are not kanaries user, please register it from
+                    <a className="font-semibold px-1" href="https://kanaries.net/home/access" target='_blank'>
+                        https://kanaries.net/home/access
+                    </a>
+                </p>
+                <p className="py-1">Then refer
+                    <a className="font-semibold px-1" href="https://github.com/Kanaries/pygwalker/wiki/How-to-get-api-key-of-kanaries%3F" target='_blank'>
+                        document
+                    </a>
+                    to set kanaries_api_key.</p>
                 </>
             );
             break;
@@ -158,10 +168,13 @@ const initJupyterCommunication = (gid: string) => {
         })
     }
 
+    const resolveTaskResult = (_: string, __: IResponse) => {}
+
     return {
         sendMsg,
         registerEndpoint,
         sendMsgAsync,
+        resolveTaskResult,
     }
 }
 
@@ -205,13 +218,84 @@ const initHttpCommunication = (gid: string, baseUrl: string) => {
     }
 
     const registerEndpoint = (_: string, __: (data: any) => any) => {}
+    const resolveTaskResult = (_: string, __: IResponse) => {}
 
     return {
         sendMsg,
         registerEndpoint,
         sendMsgAsync,
+        resolveTaskResult,
+    }
+}
+
+interface IStreamlitTaskCallback {
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+}
+
+interface IStreamlitTask {
+    rid: string;
+    action: string;
+    data: any;
+}
+
+const initStreamlitCommunication = () => {
+    const requestCallbackMap = new Map<string, IStreamlitTaskCallback>();
+    const requestTaskList = [] as IStreamlitTask[];
+
+    const sendMsg = async(action: string, data: any, timeout: number = 30_000) => {
+        const timer = setTimeout(() => {
+            raiseRequestError("communication timeout", 0);
+            throw(new Error("get result timeout"));
+        }, timeout);
+        try {
+            const resp = await sendMsgAsync(action, data);
+            if (resp.code !== 0) {
+                raiseRequestError(resp.message, resp.code);
+                throw new Error(resp.message);
+            }
+            return resp;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    const sendMsgAsync = async(action: string, data: any) => {
+        const rid = uuidv4();
+        const promise = new Promise<any>((resolve, reject) => {
+            requestTaskList.push({rid, action, data});
+            requestCallbackMap.set(rid, { resolve, reject });
+            if (requestTaskList.length === 1) {
+                setTimeout(() => {
+                    batchSendMsgAsync(requestTaskList.splice(0, requestTaskList.length));
+                }, 50);
+            }
+        });
+        return promise;
+    }
+
+    const batchSendMsgAsync = async(taskList: IStreamlitTask[]) => {
+        Streamlit.setComponentValue({request: taskList, response: null})
+    }
+
+    const resolveTaskResult = (rid: string, resp: IResponse) => {
+        const callback = requestCallbackMap.get(rid);
+        if (callback) {
+            requestCallbackMap.delete(rid);
+            callback.resolve(resp);
+        }
+    }
+
+    const registerEndpoint = (_: string, __: (data: any) => any) => {}
+
+    return {
+        sendMsg,
+        registerEndpoint,
+        sendMsgAsync,
+        resolveTaskResult,
     }
 }
 
 export type { ICommunication };
-export { initJupyterCommunication, initHttpCommunication };
+
+export { initJupyterCommunication, initHttpCommunication, initStreamlitCommunication };
